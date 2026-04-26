@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ChevronDown, ChevronRight, Plug, Zap, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Hammer } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ChevronDown, ChevronRight, Plug, Zap, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Hammer, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { ModeSwitcher } from './ModeSwitcher'
@@ -332,9 +332,17 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
   const workingSessionIds = useAtomValue(workingSessionIdsSetAtom)
   const hasWorkingSessions = workingGroups.todo.length > 0 || workingGroups.running.length > 0 || workingGroups.done.length > 0
 
-  /** 置顶 Agent 会话列表（仅活跃模式显示，按当前工作区过滤，排除 draft 和 Working） */
+  /** 系统会话列表（按当前工作区过滤，永远置顶，排除 draft） */
+  const systemSessions = React.useMemo(
+    () => agentSessions
+      .filter((s) => s.isSystemSession === true && !draftSessionIds.has(s.id) && (!currentWorkspaceId || s.workspaceId === currentWorkspaceId))
+      .sort((a, b) => b.updatedAt - a.updatedAt),
+    [agentSessions, draftSessionIds, currentWorkspaceId]
+  )
+
+  /** 置顶 Agent 会话列表（仅活跃模式显示，按当前工作区过滤，排除 draft、Working 和系统会话） */
   const pinnedAgentSessions = React.useMemo(
-    () => viewMode === 'active' ? agentSessions.filter((s) => s.pinned && !draftSessionIds.has(s.id) && !workingSessionIds.has(s.id) && (!currentWorkspaceId || s.workspaceId === currentWorkspaceId)) : [],
+    () => viewMode === 'active' ? agentSessions.filter((s) => s.pinned && !s.isSystemSession && !draftSessionIds.has(s.id) && !workingSessionIds.has(s.id) && (!currentWorkspaceId || s.workspaceId === currentWorkspaceId)) : [],
     [agentSessions, viewMode, draftSessionIds, currentWorkspaceId, workingSessionIds]
   )
 
@@ -766,10 +774,10 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
     })
   }
 
-  /** Agent 会话按工作区过滤 + 归档过滤 + 排除 draft + 排除 Working */
+  /** Agent 会话按工作区过滤 + 归档过滤 + 排除 draft + 排除 Working + 排除系统会话 */
   const filteredAgentSessions = React.useMemo(
     () => {
-      const byWorkspace = agentSessions.filter((s) => s.workspaceId === currentWorkspaceId && !draftSessionIds.has(s.id))
+      const byWorkspace = agentSessions.filter((s) => s.workspaceId === currentWorkspaceId && !draftSessionIds.has(s.id) && !s.isSystemSession)
       return viewMode === 'archived'
         ? byWorkspace.filter((s) => s.archived)
         : byWorkspace.filter((s) => !s.archived && !s.pinned && !workingSessionIds.has(s.id))
@@ -1000,6 +1008,40 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
       {/* Agent 模式 active 视图：可拖拽双区（上 置顶+Working + 下 最近会话） */}
       {mode === 'agent' && viewMode === 'active' ? (
         <div ref={agentSplitContainerRef} className="flex-1 flex flex-col min-h-0">
+          {/* 系统会话置顶分区：永远在最上方 */}
+          {systemSessions.length > 0 && (
+            <div className="px-3 pt-2 pb-1 flex-shrink-0">
+              <div className="text-[11px] font-medium text-amber-500/60 select-none mb-0.5 flex items-center gap-1">
+                <Clock size={10} />
+                <span>系统</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {systemSessions.map((session) => (
+                  <AgentSessionItem
+                    key={`system-${session.id}`}
+                    session={session}
+                    active={session.id === activeTabId}
+                    hovered={session.id === hoveredId}
+                    indicatorStatus={agentIndicatorMap.get(session.id) ?? 'idle'}
+                    isInWorkingSection={false}
+                    showPinIcon={false}
+                    isSystemSession={true}
+                    onSelect={() => handleSelectAgentSession(session.id, session.title)}
+                    onRequestDelete={() => handleRequestDelete(session.id)}
+                    onRequestMove={() => setMoveTargetId(session.id)}
+                    onRename={handleAgentRename}
+                    onTogglePin={handleTogglePinAgent}
+                    onToggleManualWorking={handleToggleManualWorkingAgent}
+                    onToggleArchive={handleToggleArchiveAgent}
+                    onMouseEnter={() => setHoveredId(session.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                  />
+                ))}
+              </div>
+              <div className="mt-1.5 border-t border-border/40" />
+            </div>
+          )}
+
           {(pinnedAgentSessions.length > 0 || hasWorkingSessions) && (
             <>
               {/* 上区：工作中 / 置顶 Tab 切换（高度可拖拽） */}
@@ -1555,6 +1597,8 @@ interface AgentSessionItemProps {
   isInWorkingSection?: boolean
   /** 行左侧状态色块；未传则不显示 */
   leftAccent?: SessionLeftAccent
+  /** 是否为系统会话（隐藏重命名/删除操作） */
+  isSystemSession?: boolean
   onSelect: () => void
   onRequestDelete: () => void
   onRequestMove: () => void
@@ -1574,6 +1618,7 @@ function AgentSessionItem({
   showPinIcon,
   isInWorkingSection,
   leftAccent,
+  isSystemSession,
   onSelect,
   onRequestDelete,
   onRequestMove,
@@ -1627,7 +1672,7 @@ function AgentSessionItem({
       onClick={onSelect}
       onDoubleClick={(e) => {
         e.stopPropagation()
-        startEdit()
+        if (!isSystemSession) startEdit()
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -1663,7 +1708,10 @@ function AgentSessionItem({
             'truncate text-[13px] leading-5 flex items-center gap-1.5',
             active ? 'text-foreground' : 'text-foreground/80'
           )}>
-            {showPinIcon && (
+            {isSystemSession && (
+              <Clock size={12} className="flex-shrink-0 text-amber-500/80" />
+            )}
+            {!isSystemSession && showPinIcon && (
               <Pin size={11} className="flex-shrink-0 text-primary/60" />
             )}
             <span className="truncate">{session.title}</span>
@@ -1734,20 +1782,22 @@ function AgentSessionItem({
             <TooltipContent side="top">迁移到其他工作区</TooltipContent>
           </Tooltip>
         )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                startEdit()
-              }}
-              className="p-1 rounded-md text-foreground/30 hover:bg-foreground/[0.08] hover:text-foreground/60 transition-colors"
-            >
-              <Pencil size={13} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">重命名</TooltipContent>
-        </Tooltip>
+        {!isSystemSession && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  startEdit()
+                }}
+                className="p-1 rounded-md text-foreground/30 hover:bg-foreground/[0.08] hover:text-foreground/60 transition-colors"
+              >
+                <Pencil size={13} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">重命名</TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -1762,20 +1812,22 @@ function AgentSessionItem({
           </TooltipTrigger>
           <TooltipContent side="top">{session.archived ? '取消归档' : '归档'}</TooltipContent>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onRequestDelete()
-              }}
-              className="p-1 rounded-md text-foreground/30 hover:bg-destructive/10 hover:text-destructive transition-colors"
-            >
-              <Trash2 size={13} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">删除会话</TooltipContent>
-        </Tooltip>
+        {!isSystemSession && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRequestDelete()
+                }}
+                className="p-1 rounded-md text-foreground/30 hover:bg-destructive/10 hover:text-destructive transition-colors"
+              >
+                <Trash2 size={13} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">删除会话</TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </div>
   )
