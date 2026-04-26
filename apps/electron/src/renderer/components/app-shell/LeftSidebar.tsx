@@ -1724,20 +1724,22 @@ function AgentSessionItem({
         'flex items-center gap-0.5 flex-shrink-0 transition-all duration-100 overflow-hidden',
         hovered && !editing ? 'opacity-100' : 'opacity-0 w-0 pointer-events-none'
       )}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onTogglePin(session.id)
-              }}
-              className="p-1 rounded-md text-foreground/30 hover:bg-foreground/[0.08] hover:text-foreground/60 transition-colors"
-            >
-              {session.pinned ? <PinOff size={13} /> : <Pin size={13} />}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">{session.pinned ? '取消置顶' : '置顶会话'}</TooltipContent>
-        </Tooltip>
+        {!isSystemSession && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onTogglePin(session.id)
+                }}
+                className="p-1 rounded-md text-foreground/30 hover:bg-foreground/[0.08] hover:text-foreground/60 transition-colors"
+              >
+                {session.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">{session.pinned ? '取消置顶' : '置顶会话'}</TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
