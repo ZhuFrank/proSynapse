@@ -335,7 +335,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
   /** 系统会话列表（按当前工作区过滤，永远置顶，排除 draft） */
   const systemSessions = React.useMemo(
     () => agentSessions
-      .filter((s) => s.isSystemSession === true && !draftSessionIds.has(s.id) && (!currentWorkspaceId || s.workspaceId === currentWorkspaceId))
+      .filter((s) => s.isSystemSession === true && !draftSessionIds.has(s.id) && s.workspaceId === currentWorkspaceId)
       .sort((a, b) => b.updatedAt - a.updatedAt),
     [agentSessions, draftSessionIds, currentWorkspaceId]
   )
@@ -1768,7 +1768,7 @@ function AgentSessionItem({
               : (isInWorkingSection || session.manualWorking) ? '取消工作中' : '标记为工作中'}
           </TooltipContent>
         </Tooltip>
-        {(indicatorStatus === 'idle' || indicatorStatus === 'completed') && (
+        {!isSystemSession && (indicatorStatus === 'idle' || indicatorStatus === 'completed') && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -1800,20 +1800,22 @@ function AgentSessionItem({
             <TooltipContent side="top">重命名</TooltipContent>
           </Tooltip>
         )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onToggleArchive(session.id)
-              }}
-              className="p-1 rounded-md text-foreground/30 hover:bg-foreground/[0.08] hover:text-foreground/60 transition-colors"
-            >
-              {session.archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">{session.archived ? '取消归档' : '归档'}</TooltipContent>
-        </Tooltip>
+        {!isSystemSession && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleArchive(session.id)
+                }}
+                className="p-1 rounded-md text-foreground/30 hover:bg-foreground/[0.08] hover:text-foreground/60 transition-colors"
+              >
+                {session.archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">{session.archived ? '取消归档' : '归档'}</TooltipContent>
+          </Tooltip>
+        )}
         {!isSystemSession && (
           <Tooltip>
             <TooltipTrigger asChild>
