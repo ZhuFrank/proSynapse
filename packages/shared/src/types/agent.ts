@@ -542,6 +542,10 @@ export interface AgentSessionMeta {
   manualWorking?: boolean
   /** 最后一次流式执行是否被用户主动中断 */
   stoppedByUser?: boolean
+  /** 是否为系统会话（非用户手动创建） */
+  isSystemSession?: boolean
+  /** 系统会话类型 */
+  systemSessionType?: 'scheduled-tasks'
   /** 创建时间戳 */
   createdAt: number
   /** 更新时间戳 */
