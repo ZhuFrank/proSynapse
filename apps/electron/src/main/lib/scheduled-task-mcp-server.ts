@@ -26,12 +26,14 @@ export interface ScheduledTaskMcpServerDefaults {
  *
  * 每次 sendMessage 调用时以当前会话的 channelId/modelId/workspaceId 为默认值构造，
  * 避免全局 singleton 跨会话混淆。
+ *
+ * sdk 由调用方（orchestrator）传入，与 injectNanoBananaMcpServer 保持一致，
+ * 避免在工厂内部使用 require() 加载纯 ESM 包。
  */
 export function createScheduledTaskMcpServer(
+  sdk: typeof import('@anthropic-ai/claude-agent-sdk'),
   defaults: ScheduledTaskMcpServerDefaults,
 ) {
-  // 延迟导入 SDK，与 orchestrator 保持一致
-  const sdk = require('@anthropic-ai/claude-agent-sdk') as typeof import('@anthropic-ai/claude-agent-sdk')
 
   const { defaultChannelId, defaultModelId, defaultWorkspaceId } = defaults
 

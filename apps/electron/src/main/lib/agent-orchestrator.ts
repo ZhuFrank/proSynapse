@@ -957,7 +957,7 @@ export class AgentOrchestrator {
       // 10.1 注入本地定时任务 MCP Server（每次 sendMessage 以当前会话上下文构造新实例）
       try {
         const { createScheduledTaskMcpServer } = await import('./scheduled-task-mcp-server')
-        const scheduledTaskServer = createScheduledTaskMcpServer({
+        const scheduledTaskServer = createScheduledTaskMcpServer(sdk, {
           defaultChannelId: channelId,
           defaultModelId: modelId || DEFAULT_MODEL_ID,
           defaultWorkspaceId: workspaceId,
@@ -965,7 +965,8 @@ export class AgentOrchestrator {
         mcpServers['proma-scheduled-tasks'] = scheduledTaskServer as unknown as Record<string, unknown>
         console.log('[Agent 编排] 已注入本地定时任务 MCP Server')
       } catch (err) {
-        console.error('[Agent 编排] 注入定时任务 MCP Server 失败:', err)
+        // 注入失败不中断会话，仅记录详细错误供排查；定时任务工具在本次对话中不可用
+        console.error('[Agent 编排] 注入定时任务 MCP Server 失败，定时任务工具本次不可用，请重启应用或检查日志:', err)
       }
 
       // 合并外部注入的自定义 MCP 服务器（如飞书群聊工具）
