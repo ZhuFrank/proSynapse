@@ -202,6 +202,7 @@ import { wechatBridge } from './lib/wechat-bridge'
 import { listTasks, createTask, updateTask as updateScheduledTask, deleteTask } from './lib/scheduled-task-store'
 import { rescheduleTask, runTaskNow, unschedule } from './lib/scheduler'
 import { ensureScheduledTaskSession } from './lib/system-session-manager'
+import { validateTrigger, validateCreateInput } from './lib/scheduled-task-validation'
 
 /** 文件浏览器中需要隐藏的系统文件 */
 const HIDDEN_FS_ENTRIES = new Set(['.DS_Store', 'Thumbs.db'])
@@ -2505,25 +2506,6 @@ export function registerIpcHandlers(): void {
 
   // ===== 定时任务管理 =====
 
-  /** 校验 trigger 字段合法性，失败时抛出 Error */
-  function validateTrigger(trigger: ScheduledTask['trigger']): void {
-    if (trigger.type === 'cron') {
-      if (typeof trigger.expression !== 'string' || !trigger.expression.trim()) {
-        throw new Error('[定时任务] cron.expression 必须为非空字符串')
-      }
-    } else if (trigger.type === 'once') {
-      if (typeof trigger.runAt !== 'number' || !Number.isFinite(trigger.runAt)) {
-        throw new Error('[定时任务] once.runAt 必须为有限数字时间戳')
-      }
-    } else if (trigger.type === 'interval') {
-      if (typeof trigger.everyMs !== 'number' || !Number.isFinite(trigger.everyMs) || trigger.everyMs <= 0) {
-        throw new Error('[定时任务] interval.everyMs 必须为正有限数')
-      }
-    } else {
-      throw new Error(`[定时任务] 未知 trigger.type: ${(trigger as { type: string }).type}`)
-    }
-  }
-
   // 列出所有定时任务
   ipcMain.handle(
     SCHEDULED_TASK_IPC_CHANNELS.LIST,
@@ -2535,15 +2517,9 @@ export function registerIpcHandlers(): void {
   // 创建定时任务
   ipcMain.handle(
     SCHEDULED_TASK_IPC_CHANNELS.CREATE,
-    async (_, input: Omit<ScheduledTask, 'id' | 'createdAt' | 'updatedAt' | 'enabled'> & { enabled?: boolean }): Promise<ScheduledTask> => {
-      if (!input.channelId || typeof input.channelId !== 'string') {
-        throw new Error('[定时任务] channelId 必须为非空字符串')
-      }
-      if (!input.modelId || typeof input.modelId !== 'string') {
-        throw new Error('[定时任务] modelId 必须为非空字符串')
-      }
-      validateTrigger(input.trigger)
-      const task = createTask(input)
+    async (_, rawInput: unknown): Promise<ScheduledTask> => {
+      validateCreateInput(rawInput)   // 校验失败时抛出；通过后 rawInput 收窄为 CreateInput
+      const task = createTask(rawInput)
       rescheduleTask(task.id)
       return task
     }
@@ -2555,6 +2531,7 @@ export function registerIpcHandlers(): void {
     async (_, id: string, patch: Partial<ScheduledTask>): Promise<ScheduledTask | undefined> => {
       if (patch.trigger) validateTrigger(patch.trigger)
       const task = updateScheduledTask(id, patch)
+      if (!task) return undefined
       rescheduleTask(id)
       return task
     }
@@ -2574,6 +2551,7 @@ export function registerIpcHandlers(): void {
     SCHEDULED_TASK_IPC_CHANNELS.PAUSE,
     async (_, id: string): Promise<ScheduledTask | undefined> => {
       const task = updateScheduledTask(id, { enabled: false })
+      if (!task) return undefined
       rescheduleTask(id)
       return task
     }
@@ -2584,6 +2562,7 @@ export function registerIpcHandlers(): void {
     SCHEDULED_TASK_IPC_CHANNELS.RESUME,
     async (_, id: string): Promise<ScheduledTask | undefined> => {
       const task = updateScheduledTask(id, { enabled: true })
+      if (!task) return undefined
       rescheduleTask(id)
       return task
     }
