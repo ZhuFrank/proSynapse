@@ -92,6 +92,8 @@ export interface AppSettings {
   stickyUserMessageEnabled?: boolean
   /** 应用图标变体 ID（dock + window icon），'default' 或 logo 变体 id */
   appIconVariant?: string
+  /** 定时任务系统会话 ID（由 system-session-manager 自动管理） */
+  scheduledTaskSystemSessionId?: string
 }
 
 /** 持久化的标签页状态 */
