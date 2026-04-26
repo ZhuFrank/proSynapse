@@ -35,6 +35,10 @@ function computeNextRunAt(trigger: Trigger, fromMs: number): number | null {
     case 'once':
       return trigger.runAt > fromMs ? trigger.runAt : null
     case 'interval': {
+      if (!Number.isFinite(trigger.everyMs) || trigger.everyMs <= 0) {
+        console.error('[调度器] interval everyMs 非法:', trigger.everyMs)
+        return null
+      }
       const start = trigger.startAt ?? fromMs
       if (start > fromMs) return start
       const elapsed = fromMs - start
@@ -53,7 +57,7 @@ function scheduleOne(task: ScheduledTask): void {
   if (!task.enabled) return
 
   const next = computeNextRunAt(task.trigger, Date.now())
-  if (next == null) return
+  if (next == null || !Number.isFinite(next)) return
 
   updateTask(task.id, { nextRunAt: next })
 
@@ -64,9 +68,10 @@ function scheduleOne(task: ScheduledTask): void {
   const t = setTimeout(async () => {
     timers.delete(task.id)
 
-    // 延迟超限：重新计算，不触发任务
+    // 延迟超限：重新计算，不触发任务；重新读取最新状态，避免使用过期闭包
     if (delay >= MAX) {
-      scheduleOne(task)
+      const latest = getTask(task.id)
+      if (latest) scheduleOne(latest)
       return
     }
 
