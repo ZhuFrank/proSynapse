@@ -107,7 +107,10 @@ export function TaskEditDialog({ task, onClose, onSaved }: TaskEditDialogProps):
 
   // 当渠道变化时重置模型
   const selectedChannel = channels.find((c) => c.id === channelId)
-  const availableModels = selectedChannel?.models.filter((m) => m.enabled) ?? []
+  const availableModels = React.useMemo(
+    () => selectedChannel?.models.filter((m) => m.enabled) ?? [],
+    [selectedChannel]
+  )
 
   // 可用渠道：enabled 且有模型
   const availableChannels = channels.filter((c) => c.enabled && c.models.some((m) => m.enabled))
@@ -137,6 +140,10 @@ export function TaskEditDialog({ task, onClose, onSaved }: TaskEditDialogProps):
     if (!prompt.trim()) { toast.error('请填写任务提示词'); return }
     if (!channelId) { toast.error('请选择渠道'); return }
     if (!modelId) { toast.error('请选择模型'); return }
+    if (triggerType === 'once' && new Date(onceAt).getTime() <= Date.now()) {
+      toast.error('执行时间必须在未来')
+      return
+    }
 
     setSubmitting(true)
     try {

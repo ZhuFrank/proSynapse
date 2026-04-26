@@ -92,7 +92,7 @@ function TaskRow({ task, actions }: TaskRowProps): React.ReactElement {
     setRunningNow(true)
     try {
       await actions.onRunNow(task.id)
-      toast.success(`已触发「${task.name}」`, { description: 'Agent 将在后台开始执行' })
+      toast.success(`已执行「${task.name}」`, { description: '已执行：查看消息历史' })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       toast.error(`执行失败: ${msg}`)
@@ -277,7 +277,8 @@ export function TaskManagerPanel(): React.ReactElement {
 
   const handleRunNow = React.useCallback(async (id: string): Promise<void> => {
     await window.electronAPI.scheduledTasks.runNow(id)
-  }, [])
+    await refresh()
+  }, [refresh])
 
   const handlePause = React.useCallback(async (id: string): Promise<void> => {
     await window.electronAPI.scheduledTasks.pause(id)
