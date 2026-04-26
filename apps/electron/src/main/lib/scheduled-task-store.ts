@@ -5,8 +5,9 @@
  * 存储在 ~/.proma/scheduled-tasks.json
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import { readJsonFileSafe, writeJsonFileAtomic } from './safe-file'
 import { getScheduledTasksPath } from './config-paths'
 import type { ScheduledTask } from '@proma/shared'
 
@@ -17,18 +18,20 @@ interface FileShape {
 function read(): FileShape {
   const filePath = getScheduledTasksPath()
 
+  // 文件不存在 → 首次运行，返回空列表
   if (!existsSync(filePath)) return { tasks: [] }
 
-  try {
-    return JSON.parse(readFileSync(filePath, 'utf-8')) as FileShape
-  } catch (e) {
-    console.error('[定时任务] 配置文件解析失败，使用空列表:', e)
-    return { tasks: [] }
+  // 文件存在但解析失败（含 .bak 回退也失败）→ 抛出以防止覆盖损坏数据
+  const data = readJsonFileSafe<FileShape>(filePath)
+  if (data === null) {
+    console.error('[定时任务] 配置文件损坏且无法恢复，拒绝返回空列表以保护数据:', filePath)
+    throw new Error('[定时任务] 配置文件损坏，请检查或删除后重试')
   }
+  return data
 }
 
 function write(data: FileShape): void {
-  writeFileSync(getScheduledTasksPath(), JSON.stringify(data, null, 2), 'utf-8')
+  writeJsonFileAtomic(getScheduledTasksPath(), data)
 }
 
 export function listTasks(): ScheduledTask[] {
@@ -70,6 +73,7 @@ export function deleteTask(id: string): boolean {
   const data = read()
   const before = data.tasks.length
   data.tasks = data.tasks.filter(t => t.id !== id)
+  if (data.tasks.length === before) return false
   write(data)
-  return data.tasks.length < before
+  return true
 }
