@@ -135,3 +135,8 @@ export async function runTaskNow(id: string): Promise<void> {
   const task = getTask(id)
   if (task) await runScheduledTaskOnce(task)
 }
+
+/** 取消指定任务的 timer（删除任务前调用） */
+export function unschedule(id: string): void {
+  cancelOne(id)
+}

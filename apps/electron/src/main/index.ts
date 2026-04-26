@@ -57,6 +57,7 @@ import { wechatBridge } from './lib/wechat-bridge'
 import { getWeChatConfig } from './lib/wechat-config'
 import { createQuickTaskWindow, toggleQuickTaskWindow, destroyQuickTaskWindow } from './lib/quick-task-window'
 import { registerGlobalShortcut, unregisterAllGlobalShortcuts } from './lib/global-shortcut-service'
+import { startScheduler, stopScheduler } from './lib/scheduler'
 
 // ===== Bridge 注册（新增 Bridge 只需在此添加一个 registerBridge 调用） =====
 
@@ -292,6 +293,9 @@ app.whenReady().then(async () => {
   // 启动所有已注册的 Bridge（飞书/钉钉/微信等）
   await startAllBridges()
 
+  // 启动定时任务调度器（依赖 agent-service + task store 已就绪）
+  startScheduler()
+
   app.on('activate', () => {
     // 直接检查 mainWindow 引用，避免 getAllWindows() 包含 DevTools 等其他窗口导致误判
     if (!mainWindow || mainWindow.isDestroyed()) {
@@ -329,6 +333,8 @@ app.on('before-quit', () => {
   stopChatToolsWatcher()
   // 停止所有 Bridge
   stopAllBridges()
+  // 停止定时任务调度器
+  stopScheduler()
   // 注销全局快捷键
   unregisterAllGlobalShortcuts()
   // 销毁快速任务窗口

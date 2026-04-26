@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, SCHEDULED_TASK_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, APP_ICON_IPC_CHANNELS } from '../types'
 import type {
   RuntimeStatus,
@@ -95,6 +95,7 @@ import type {
   WeChatBridgeState,
   AgentQueueMessageInput,
   PendingRequestsSnapshot,
+  ScheduledTask,
 } from '@proma/shared'
 import type { UserProfile, AppSettings, QuickTaskSubmitInput, QuickTaskOpenSessionData } from '../types'
 import { QUICK_TASK_IPC_CHANNELS } from '../types'
@@ -745,6 +746,27 @@ export interface ElectronAPI {
   onQuickTaskFocus: (callback: () => void) => () => void
   /** 订阅快速任务打开会话事件（主窗口接收，由渲染进程负责创建会话） */
   onQuickTaskOpenSession: (callback: (data: QuickTaskOpenSessionData) => void) => () => void
+
+  // ===== 定时任务管理 =====
+
+  scheduledTasks: {
+    /** 列出所有定时任务 */
+    list: () => Promise<ScheduledTask[]>
+    /** 创建定时任务 */
+    create: (input: Omit<ScheduledTask, 'id' | 'createdAt' | 'updatedAt' | 'enabled'> & { enabled?: boolean }) => Promise<ScheduledTask>
+    /** 更新定时任务 */
+    update: (id: string, patch: Partial<ScheduledTask>) => Promise<ScheduledTask | undefined>
+    /** 删除定时任务 */
+    delete: (id: string) => Promise<boolean>
+    /** 暂停定时任务 */
+    pause: (id: string) => Promise<ScheduledTask | undefined>
+    /** 恢复定时任务 */
+    resume: (id: string) => Promise<ScheduledTask | undefined>
+    /** 立即执行定时任务 */
+    runNow: (id: string) => Promise<void>
+    /** 获取定时任务系统会话 ID */
+    getSystemSessionId: (channelId: string, workspaceId?: string) => Promise<string>
+  }
 }
 
 /**
@@ -1658,6 +1680,19 @@ const electronAPI: ElectronAPI = {
     const listener = (_: unknown, data: QuickTaskOpenSessionData): void => callback(data)
     ipcRenderer.on('quick-task:open-session', listener)
     return () => { ipcRenderer.removeListener('quick-task:open-session', listener) }
+  },
+
+  // ===== 定时任务管理 =====
+
+  scheduledTasks: {
+    list: () => ipcRenderer.invoke(SCHEDULED_TASK_IPC_CHANNELS.LIST),
+    create: (input) => ipcRenderer.invoke(SCHEDULED_TASK_IPC_CHANNELS.CREATE, input),
+    update: (id, patch) => ipcRenderer.invoke(SCHEDULED_TASK_IPC_CHANNELS.UPDATE, id, patch),
+    delete: (id) => ipcRenderer.invoke(SCHEDULED_TASK_IPC_CHANNELS.DELETE, id),
+    pause: (id) => ipcRenderer.invoke(SCHEDULED_TASK_IPC_CHANNELS.PAUSE, id),
+    resume: (id) => ipcRenderer.invoke(SCHEDULED_TASK_IPC_CHANNELS.RESUME, id),
+    runNow: (id) => ipcRenderer.invoke(SCHEDULED_TASK_IPC_CHANNELS.RUN_NOW, id),
+    getSystemSessionId: (channelId, workspaceId) => ipcRenderer.invoke(SCHEDULED_TASK_IPC_CHANNELS.GET_SYSTEM_SESSION_ID, channelId, workspaceId),
   },
 }
 
