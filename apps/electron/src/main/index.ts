@@ -108,6 +108,7 @@ import {
 } from './lib/voice-dictation-window'
 import { registerGlobalShortcut, unregisterAllGlobalShortcuts } from './lib/global-shortcut-service'
 import { TRAY_IPC_CHANNELS } from '../types'
+import { startScheduler, stopScheduler } from './lib/scheduler'
 
 const MIGRATION_IPC_OPEN = 'migration:open-import-file'
 
@@ -476,6 +477,9 @@ async function bootstrap(): Promise<void> {
   // 启动所有已注册的 Bridge（飞书/钉钉/微信等）
   await safeAwait('startAllBridges', () => startAllBridges())
 
+  // 启动定时任务调度器（依赖 agent-service + task store 已就绪）
+  startScheduler()
+
   app.on('activate', () => {
     if (shouldSuppressVoiceDictationActivate()) {
       return
@@ -567,6 +571,8 @@ app.on('before-quit', () => {
   stopChatToolsWatcher()
   // 停止所有 Bridge
   stopAllBridges()
+  // 停止定时任务调度器
+  stopScheduler()
   // 注销全局快捷键
   unregisterAllGlobalShortcuts()
   // 销毁快速任务窗口

@@ -489,6 +489,15 @@ export function seedDefaultSkills(): void {
 }
 
 /**
+ * 获取定时任务配置文件路径
+ *
+ * @returns ~/.proma/scheduled-tasks.json
+ */
+export function getScheduledTasksPath(): string {
+  return join(getConfigDir(), 'scheduled-tasks.json')
+}
+
+/**
  * 获取微信配置文件路径
  *
  * @returns ~/.proma/wechat.json

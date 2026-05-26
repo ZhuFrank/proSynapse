@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ChevronDown, ChevronRight, Plug, Zap, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Hammer, Bot, MessageSquare, MoreHorizontal } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, ChevronDown, ChevronRight, Plug, Zap, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Hammer, Bot, MessageSquare, MoreHorizontal, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { ModeSwitcher } from './ModeSwitcher'
@@ -425,9 +425,17 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
   const workingSessionIds = useAtomValue(workingSessionIdsSetAtom)
   const hasWorkingSessions = workingGroups.todo.length > 0 || workingGroups.running.length > 0 || workingGroups.done.length > 0
 
-  /** 置顶 Agent 会话列表（仅活跃模式显示，按当前工作区过滤，排除 draft 和 Working） */
+  /** 系统会话列表（按当前工作区过滤，永远置顶，排除 draft） */
+  const systemSessions = React.useMemo(
+    () => agentSessions
+      .filter((s) => s.isSystemSession === true && !draftSessionIds.has(s.id) && s.workspaceId === currentWorkspaceId)
+      .sort((a, b) => b.updatedAt - a.updatedAt),
+    [agentSessions, draftSessionIds, currentWorkspaceId]
+  )
+
+  /** 置顶 Agent 会话列表（仅活跃模式显示，按当前工作区过滤，排除 draft、Working 和系统会话） */
   const pinnedAgentSessions = React.useMemo(
-    () => viewMode === 'active' ? agentSessions.filter((s) => s.pinned && !draftSessionIds.has(s.id) && !workingSessionIds.has(s.id) && (!currentWorkspaceId || s.workspaceId === currentWorkspaceId)) : [],
+    () => viewMode === 'active' ? agentSessions.filter((s) => s.pinned && !s.isSystemSession && !draftSessionIds.has(s.id) && !workingSessionIds.has(s.id) && (!currentWorkspaceId || s.workspaceId === currentWorkspaceId)) : [],
     [agentSessions, viewMode, draftSessionIds, currentWorkspaceId, workingSessionIds]
   )
 
@@ -864,10 +872,10 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
     })
   }
 
-  /** Agent 会话按工作区过滤 + 归档过滤 + 排除 draft + 排除 Working */
+  /** Agent 会话按工作区过滤 + 归档过滤 + 排除 draft + 排除 Working + 排除系统会话 */
   const filteredAgentSessions = React.useMemo(
     () => {
-      const byWorkspace = agentSessions.filter((s) => s.workspaceId === currentWorkspaceId && !draftSessionIds.has(s.id))
+      const byWorkspace = agentSessions.filter((s) => s.workspaceId === currentWorkspaceId && !draftSessionIds.has(s.id) && !s.isSystemSession)
       return viewMode === 'archived'
         ? byWorkspace.filter((s) => s.archived)
         : byWorkspace.filter((s) => !s.archived && !s.pinned && !workingSessionIds.has(s.id))
@@ -1316,6 +1324,40 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
       {/* Agent 模式 active 视图：可拖拽双区（上 置顶+Working + 下 最近会话） */}
       {mode === 'agent' && viewMode === 'active' ? (
         <div ref={agentSplitContainerRef} className="flex-1 flex flex-col min-h-0">
+          {/* 系统会话置顶分区：永远在最上方 */}
+          {systemSessions.length > 0 && (
+            <div className="px-3 pt-2 pb-1 flex-shrink-0">
+              <div className="text-[11px] font-medium text-amber-500/60 select-none mb-0.5 flex items-center gap-1">
+                <Clock size={10} />
+                <span>系统</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {systemSessions.map((session) => (
+                  <AgentSessionItem
+                    key={`system-${session.id}`}
+                    session={session}
+                    active={session.id === activeTabId}
+                    hovered={session.id === hoveredId}
+                    indicatorStatus={agentIndicatorMap.get(session.id) ?? 'idle'}
+                    isInWorkingSection={false}
+                    showPinIcon={false}
+                    isSystemSession={true}
+                    onSelect={() => handleSelectAgentSession(session.id, session.title)}
+                    onRequestDelete={() => handleRequestDelete(session.id)}
+                    onRequestMove={() => setMoveTargetId(session.id)}
+                    onRename={handleAgentRename}
+                    onTogglePin={handleTogglePinAgent}
+                    onToggleManualWorking={handleToggleManualWorkingAgent}
+                    onToggleArchive={handleToggleArchiveAgent}
+                    onMouseEnter={() => setHoveredId(session.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                  />
+                ))}
+              </div>
+              <div className="mt-1.5 border-t border-border/40" />
+            </div>
+          )}
+
           {(pinnedAgentSessions.length > 0 || hasWorkingSessions) && (
             <>
               {/* 上区：工作中 / 置顶 Tab 切换（高度可拖拽） */}
@@ -1847,6 +1889,8 @@ interface AgentSessionItemProps {
   leftAccent?: SessionLeftAccent
   /** 工作区名称 Badge（跨工作区列表时显示） */
   workspaceName?: string
+  /** 是否为系统会话（隐藏重命名/删除操作） */
+  isSystemSession?: boolean
   onSelect: (id: string, title: string) => void
   onRequestDelete: (id: string) => void
   onRequestMove: (id: string) => void
@@ -1864,6 +1908,7 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
   isInWorkingSection,
   leftAccent,
   workspaceName,
+  isSystemSession,
   onSelect,
   onRequestDelete,
   onRequestMove,
@@ -1916,10 +1961,12 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
     MenuSeparator: typeof ContextMenuSeparator | typeof DropdownMenuSeparator,
   ) => (
     <>
-      <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => onTogglePin(session.id)}>
-        {session.pinned ? <PinOff size={14} /> : <Pin size={14} />}
-        {session.pinned ? '取消置顶' : '置顶会话'}
-      </MenuItem>
+      {!isSystemSession && (
+        <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => onTogglePin(session.id)}>
+          {session.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+          {session.pinned ? '取消置顶' : '置顶会话'}
+        </MenuItem>
+      )}
       <MenuItem
         className="text-xs py-1 [&>svg]:size-3.5"
         disabled={indicatorStatus === 'running'}
@@ -1928,25 +1975,33 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
         <Hammer size={14} className={isWorking ? 'fill-current' : ''} />
         {indicatorStatus === 'running' ? '运行中无法移出' : isWorking ? '取消工作中' : '标记为工作中'}
       </MenuItem>
-      {canMove && (
+      {!isSystemSession && canMove && (
         <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => onRequestMove(session.id)}>
           <ArrowRightLeft size={14} />
           迁移到其他工作区
         </MenuItem>
       )}
-      <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => startEdit()}>
-        <Pencil size={14} />
-        重命名
-      </MenuItem>
-      <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => onToggleArchive(session.id)}>
-        {session.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-        {session.archived ? '取消归档' : '归档'}
-      </MenuItem>
-      <MenuSeparator className="my-0.5" />
-      <MenuItem className="text-xs py-1 [&>svg]:size-3.5 text-destructive" onSelect={() => onRequestDelete(session.id)}>
-        <Trash2 size={14} />
-        删除会话
-      </MenuItem>
+      {!isSystemSession && (
+        <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => startEdit()}>
+          <Pencil size={14} />
+          重命名
+        </MenuItem>
+      )}
+      {!isSystemSession && (
+        <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => onToggleArchive(session.id)}>
+          {session.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+          {session.archived ? '取消归档' : '归档'}
+        </MenuItem>
+      )}
+      {!isSystemSession && (
+        <>
+          <MenuSeparator className="my-0.5" />
+          <MenuItem className="text-xs py-1 [&>svg]:size-3.5 text-destructive" onSelect={() => onRequestDelete(session.id)}>
+            <Trash2 size={14} />
+            删除会话
+          </MenuItem>
+        </>
+      )}
     </>
   )
 
@@ -1959,7 +2014,7 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
           onClick={() => onSelect(session.id, session.title)}
           onDoubleClick={(e) => {
             e.stopPropagation()
-            startEdit()
+            if (!isSystemSession) startEdit()
           }}
           className={cn(
             'group relative w-full flex items-center gap-2 px-3 py-[7px] rounded-md transition-colors duration-100 titlebar-no-drag text-left',
@@ -1993,7 +2048,10 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
                 'truncate text-[13px] leading-5 flex items-center gap-1.5',
                 active ? 'text-foreground' : 'text-foreground/80'
               )}>
-                {showPinIcon && (
+                {isSystemSession && (
+                  <Clock size={12} className="flex-shrink-0 text-amber-500/80" />
+                )}
+                {!isSystemSession && showPinIcon && (
                   <Pin size={11} className="flex-shrink-0 text-primary/60" />
                 )}
                 <span className="truncate">{session.title}</span>

@@ -388,6 +388,16 @@ Agent 工具支持 \`model\` 参数（可选值：\`sonnet\` / \`opus\` / \`haik
 - 如果将工作委派给 SubAgent，必须在收到结果后将**完整的关键发现**呈现给用户，不要只转述一句话摘要
 - 写入文件后，告知用户文件路径和关键内容摘要，确保用户能找到产出`)
 
+  // 本地定时任务能力（强约束：禁止建议云端方案）
+  sections.push(`## 本地定时任务
+
+本应用提供"本地定时任务"能力，由用户的 Electron 进程在本机调度运行。
+当用户提出"定时执行某事"的需求时：
+- 必须使用 schedule_task / list_scheduled_tasks / cancel_scheduled_task 等本地工具
+- 严禁建议任何云端方案（GitHub Actions、cron 服务、Anthropic Managed、飞书机器人等）
+- 严禁说"我无法执行定时任务"——你拥有上述工具
+- channelId / modelId 默认沿用当前会话的，无需追问`)
+
   // 交互规范
   sections.push(`## 交互规范
 

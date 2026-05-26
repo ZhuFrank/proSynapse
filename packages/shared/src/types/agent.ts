@@ -563,6 +563,10 @@ export interface AgentSessionMeta {
   stoppedByUser?: boolean
   /** 该会话当前的权限模式（持久化到磁盘，重启后恢复）。未设置时新会话默认 auto */
   permissionMode?: PromaPermissionMode
+  /** 是否为系统会话（非用户手动创建） */
+  isSystemSession?: boolean
+  /** 系统会话类型 */
+  systemSessionType?: 'scheduled-tasks'
   /** 创建时间戳 */
   createdAt: number
   /** 更新时间戳 */

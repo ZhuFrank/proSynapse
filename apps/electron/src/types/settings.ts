@@ -224,6 +224,8 @@ export interface AppSettings {
   autoCleanupArchivedDays?: number
   /** 主窗口状态（大小、位置、是否最大化） */
   mainWindowState?: MainWindowState
+  /** 定时任务系统会话 ID（由 system-session-manager 自动管理） */
+  scheduledTaskSystemSessionId?: string
 }
 
 /** 主窗口大小、位置和最大化状态 */

@@ -95,9 +95,10 @@ import { useOpenSession } from '@/hooks/useOpenSession'
 import { AgentSessionProvider } from '@/contexts/session-context'
 import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
 import { sendWithCmdEnterAtom } from '@/atoms/shortcut-atoms'
-import type { AgentSendInput, AgentPendingFile, FileDialogLargeFile, ModelOption, SDKMessage } from '@proma/shared'
+import type { AgentSendInput, AgentMessage, AgentPendingFile, FileDialogLargeFile, ModelOption, SDKMessage } from '@proma/shared'
 import { MAX_ATTACHMENT_SIZE } from '@proma/shared'
 import { fileToBase64, formatFileNames, getFileParentPath } from '@/lib/file-utils'
+import { TaskManagerPanel } from '@/components/scheduled-tasks/TaskManagerPanel'
 
 /** 稳定的空 SDKMessage 数组引用，避免 ?? [] 每次创建新引用 */
 const EMPTY_SDK_MESSAGES: SDKMessage[] = []
@@ -340,6 +341,12 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     if (!meta) return globalWorkspaceId // 数据未加载，回退全局
     return meta.workspaceId ?? null     // 数据已加载，以会话自身为准
   }, [sessions, sessionId, globalWorkspaceId])
+  // 判断是否为定时任务系统会话（仅匹配时显示 TaskManagerPanel）
+  const isScheduledTasksSession = React.useMemo(() => {
+    const meta = sessions.find((s) => s.id === sessionId)
+    return meta?.isSystemSession === true && meta?.systemSessionType === 'scheduled-tasks'
+  }, [sessions, sessionId])
+
   const [pendingPrompt, setPendingPrompt] = useAtom(agentPendingPromptAtom)
   const [pendingFiles, setPendingFiles] = useAtom(agentPendingFilesAtomFamily(sessionId))
   const workspaces = useAtomValue(agentWorkspacesAtom)
@@ -1891,6 +1898,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       <div className="flex flex-col h-full flex-1 min-w-0 max-w-[min(72rem,100%)] mx-auto">
         {/* Agent Header */}
         <AgentHeader sessionId={sessionId} />
+
+        {/* 定时任务管理面板（仅在定时任务系统会话中显示） */}
+        {isScheduledTasksSession && <TaskManagerPanel />}
 
         {/* 消息区域 */}
         <AgentMessages

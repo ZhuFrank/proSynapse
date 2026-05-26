@@ -95,20 +95,41 @@ export function getAgentSessionMeta(id: string): AgentSessionMeta | undefined {
 
 /**
  * 创建新会话
+ *
+ * @param options.idOverride       用预定义 id 而非 randomUUID；若同 id 已存在则抛出错误
+ * @param options.isSystemSession  标记为系统会话（非用户手动创建）
+ * @param options.systemSessionType 系统会话子类型
  */
 export function createAgentSession(
   title?: string,
   channelId?: string,
   workspaceId?: string,
+  options?: {
+    idOverride?: string
+    isSystemSession?: boolean
+    systemSessionType?: 'scheduled-tasks'
+  },
 ): AgentSessionMeta {
   const index = readIndex()
   const now = Date.now()
 
+  const sessionId = options?.idOverride ?? randomUUID()
+
+  // 若使用预定义 id，检查是否已存在，避免覆盖现有会话
+  if (options?.idOverride) {
+    const exists = index.sessions.find((s) => s.id === options.idOverride)
+    if (exists) {
+      throw new Error(`Agent 会话已存在，不可重复创建: ${options.idOverride}`)
+    }
+  }
+
   const meta: AgentSessionMeta = {
-    id: randomUUID(),
+    id: sessionId,
     title: title || '新 Agent 会话',
     channelId,
     workspaceId,
+    ...(options?.isSystemSession !== undefined ? { isSystemSession: options.isSystemSession } : {}),
+    ...(options?.systemSessionType !== undefined ? { systemSessionType: options.systemSessionType } : {}),
     createdAt: now,
     updatedAt: now,
   }

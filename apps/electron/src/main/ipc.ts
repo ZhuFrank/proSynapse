@@ -9,7 +9,7 @@ import { join, resolve, sep, dirname } from 'node:path'
 import { existsSync, realpathSync, rmSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, isPromaPermissionMode } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, SCHEDULED_TASK_IPC_CHANNELS, isPromaPermissionMode } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -108,6 +108,7 @@ import type {
   RevertFileInput,
   FileAccessOptions,
   ResolvedFileUrl,
+  ScheduledTask,
 } from '@proma/shared'
 import type { UserProfile, AppSettings } from '../types'
 import { getRuntimeStatus, getGitRepoStatus, reinitializeRuntime } from './lib/runtime-init'
@@ -244,6 +245,10 @@ import { getDingTalkConfig, saveDingTalkConfig, getDecryptedClientSecret, getDin
 import { dingtalkBridgeManager } from './lib/dingtalk-bridge-manager'
 import { getWeChatConfig } from './lib/wechat-config'
 import { wechatBridge } from './lib/wechat-bridge'
+import { listTasks, createTask, updateTask as updateScheduledTask, deleteTask } from './lib/scheduled-task-store'
+import { rescheduleTask, runTaskNow, unschedule } from './lib/scheduler'
+import { ensureScheduledTaskSession } from './lib/system-session-manager'
+import { validateTrigger, validateCreateInput } from './lib/scheduled-task-validation'
 
 /** 文件浏览器中需要隐藏的系统文件 */
 const HIDDEN_FS_ENTRIES = new Set(['.DS_Store', 'Thumbs.db'])
@@ -3880,6 +3885,86 @@ export function registerIpcHandlers(): void {
     async (event) => {
       const win = BrowserWindow.fromWebContents(event.sender)
       return win && !win.isDestroyed() ? win.isMaximized() : false
+    }
+  )
+
+  // ===== 定时任务管理 =====
+
+  // 列出所有定时任务
+  ipcMain.handle(
+    SCHEDULED_TASK_IPC_CHANNELS.LIST,
+    async (): Promise<ScheduledTask[]> => {
+      return listTasks()
+    }
+  )
+
+  // 创建定时任务
+  ipcMain.handle(
+    SCHEDULED_TASK_IPC_CHANNELS.CREATE,
+    async (_, rawInput: unknown): Promise<ScheduledTask> => {
+      validateCreateInput(rawInput)   // 校验失败时抛出；通过后 rawInput 收窄为 CreateInput
+      const task = createTask(rawInput)
+      rescheduleTask(task.id)
+      return task
+    }
+  )
+
+  // 更新定时任务
+  ipcMain.handle(
+    SCHEDULED_TASK_IPC_CHANNELS.UPDATE,
+    async (_, id: string, patch: Partial<ScheduledTask>): Promise<ScheduledTask | undefined> => {
+      if (patch.trigger) validateTrigger(patch.trigger)
+      const task = updateScheduledTask(id, patch)
+      if (!task) return undefined
+      rescheduleTask(id)
+      return task
+    }
+  )
+
+  // 删除定时任务
+  ipcMain.handle(
+    SCHEDULED_TASK_IPC_CHANNELS.DELETE,
+    async (_, id: string): Promise<boolean> => {
+      unschedule(id)
+      return deleteTask(id)
+    }
+  )
+
+  // 暂停定时任务
+  ipcMain.handle(
+    SCHEDULED_TASK_IPC_CHANNELS.PAUSE,
+    async (_, id: string): Promise<ScheduledTask | undefined> => {
+      const task = updateScheduledTask(id, { enabled: false })
+      if (!task) return undefined
+      rescheduleTask(id)
+      return task
+    }
+  )
+
+  // 恢复定时任务
+  ipcMain.handle(
+    SCHEDULED_TASK_IPC_CHANNELS.RESUME,
+    async (_, id: string): Promise<ScheduledTask | undefined> => {
+      const task = updateScheduledTask(id, { enabled: true })
+      if (!task) return undefined
+      rescheduleTask(id)
+      return task
+    }
+  )
+
+  // 立即执行定时任务
+  ipcMain.handle(
+    SCHEDULED_TASK_IPC_CHANNELS.RUN_NOW,
+    async (_, id: string): Promise<void> => {
+      await runTaskNow(id)
+    }
+  )
+
+  // 获取定时任务系统会话 ID
+  ipcMain.handle(
+    SCHEDULED_TASK_IPC_CHANNELS.GET_SYSTEM_SESSION_ID,
+    async (_, channelId: string, workspaceId?: string): Promise<string> => {
+      return ensureScheduledTaskSession(channelId, workspaceId)
     }
   )
 }
