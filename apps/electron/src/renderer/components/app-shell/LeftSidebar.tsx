@@ -1337,7 +1337,6 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                     key={`system-${session.id}`}
                     session={session}
                     active={session.id === activeTabId}
-                    hovered={session.id === hoveredId}
                     indicatorStatus={agentIndicatorMap.get(session.id) ?? 'idle'}
                     isInWorkingSection={false}
                     showPinIcon={false}
@@ -1349,8 +1348,6 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                     onTogglePin={handleTogglePinAgent}
                     onToggleManualWorking={handleToggleManualWorkingAgent}
                     onToggleArchive={handleToggleArchiveAgent}
-                    onMouseEnter={() => setHoveredId(session.id)}
-                    onMouseLeave={() => setHoveredId(null)}
                   />
                 ))}
               </div>
